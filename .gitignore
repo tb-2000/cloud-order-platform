@@ -1,0 +1,30 @@
+
+# Maven
+target/
+**/target/
+
+# Java
+*.class
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local data
+postgres-data/
+
+# private files
+Projektablauf-Plan.txt
