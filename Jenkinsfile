@@ -38,18 +38,18 @@ pipeline {
                 bat 'mvn -B -ntp -DskipTests package'
             }
         }
+    }
 
-        post {
-            always {
-                junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
-            }
-            success {
-                ArchiveArtifacts(artifacts: 'services/product-service/target/*.jar', fingerprint: true)
-                echo 'CI pipeline completed successfully!'
-            }
-            failure {
-                echo 'CI pipeline failed!'
-            }
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
+        }
+        success {
+            ArchiveArtifacts(artifacts: 'services/product-service/target/*.jar', fingerprint: true)
+            echo 'CI pipeline completed successfully!'
+        }
+        failure {
+            echo 'CI pipeline failed!'
         }
     }
 }
