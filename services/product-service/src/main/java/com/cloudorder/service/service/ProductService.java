@@ -92,15 +92,13 @@ public class ProductService {
         product.setPrice(request.price());
         product.setStock(request.stock());
 
-        Product updatedProduct = productRepository.save(product);
-
         return new ProductResponse(
-            updatedProduct.getId(),
-            updatedProduct.getName(),
-            updatedProduct.getDescription(),
-            updatedProduct.getPrice(),
-            updatedProduct.getStock(),
-            updatedProduct.getCreatedAt()
+            product.getId(),
+            product.getName(),
+            product.getDescription(),
+            product.getPrice(),
+            product.getStock(),
+            product.getCreatedAt()
         );
     }
 
@@ -120,8 +118,6 @@ public class ProductService {
             .orElseThrow(() -> new ProductNotFoundException(id));
 
         product.setStock(request.stock());
-
-        productRepository.save(product);
 
         return new ProductResponse(
             product.getId(),

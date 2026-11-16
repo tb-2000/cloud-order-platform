@@ -1,0 +1,13 @@
+# Terminal 1: Projekt-Hauptverzeichnis
+cd C:\Users\Tom\vscode\cloud-order-platform
+docker-compose -f infrastructure/docker/compose.yaml up -d
+
+# prüfen, ob Container läuft
+docker-compose -f infrastructure/docker/compose.yaml ps
+
+# PostgreSQL/ Container stoppen
+docker-compose -f infrastructure/docker/compose.yaml stop
+
+# Terminal 2: services/product-service
+cd C:\Users\Tom\vscode\cloud-order-platform\services\product-service
+mvn spring-boot:run
