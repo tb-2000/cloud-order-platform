@@ -45,7 +45,7 @@ pipeline {
             junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
         }
         success {
-            ArchiveArtifacts(artifacts: 'services/product-service/target/*.jar', fingerprint: true)
+            archiveArtifacts(artifacts: 'services/product-service/target/*.jar', fingerprint: true)
             echo 'CI pipeline completed successfully!'
         }
         failure {
