@@ -53,7 +53,7 @@ pipeline {
             steps {
                 echo 'Deploying Product Service with Docker Compose...'
                 bat '''
-                    docker compose -f infrastructure/docker/compose.yaml up -d --no-deps --force-recreate product-service
+                    docker-compose -f infrastructure/docker/compose.yaml up -d --no-deps --force-recreate product-service
                 '''
             }
         }
