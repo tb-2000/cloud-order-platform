@@ -38,6 +38,17 @@ pipeline {
                 bat 'mvn -B -ntp -DskipTests package'
             }
         }
+        stage('Build Docker') {
+            steps {
+                echo 'Building Docker image...'
+                bat '''
+                    docker build ^
+                    -t cloudorder/product-service:%BUILD_NUMBER% ^
+                    -t cloudorder/product-service:latest ^
+                    ./services/product-service
+                '''
+            }
+        }
     }
 
     post {
