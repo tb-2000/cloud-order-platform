@@ -49,6 +49,50 @@ pipeline {
                 '''
             }
         }
+        stage('Deploy') {
+            steps {
+                echo 'Deploying Product Service with Docker Compose...'
+                bat '''
+                    docker compose -f infrastructure/docker/compose.yaml up -d --no-deps --force-recreate product-service
+                '''
+            }
+        }
+        stage('Health Check') {
+            steps {
+                echo 'Performing health check...'
+                powershell '''
+                    $url = "http://localhost:8082/actuator/health"
+                    $maxAttempts = 20
+                    $healthy = $false
+
+                    for ($i = 1; $i -le $maxAttempts; $i++) {
+                        Write-Host "Healthcheck attempt $i of $maxAttempts"
+
+                        try {
+                            $response = Invoke-RestMethod -Uri $url -TimeoutSec 5
+
+                            if ($response.status -eq "UP") {
+                                Write-Host "Product Service is healthy!"
+                                $healthy = $true
+                                break
+                            }
+
+                            Write-Host "Health status: $($response.status)"
+                        }
+                        catch {
+                            Write-Host "Product Service not ready yet."
+                        }
+
+                        Start-Sleep -Seconds 5
+                    }
+
+                    if (-not $healthy) {
+                        Write-Error "Healthcheck failed: Product Service did not become healthy."
+                        exit 1
+                    }
+                '''
+            }
+        }
     }
 
     post {

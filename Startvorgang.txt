@@ -1,8 +1,11 @@
 # Terminal 1: Projekt-Hauptverzeichnis
 cd C:\Users\Tom\vscode\cloud-order-platform
+# (veraltet)
 docker-compose -f infrastructure/docker/compose.yaml up -d
 
-# prüfen, ob Container läuft
+docker-compose -f infrastructure/docker/compose.yaml up -d --force-recreate product-service
+
+# prï¿½fen, ob Container lï¿½uft
 docker-compose -f infrastructure/docker/compose.yaml ps
 
 # PostgreSQL/ Container stoppen

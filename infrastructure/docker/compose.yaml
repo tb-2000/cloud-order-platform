@@ -22,5 +22,21 @@ services:
       timeout: 3s
       retries: 10
 
+  product-service:
+    image: cloudorder/product-service:latest
+    container_name: cloudorder-product
+
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/productdb
+      SPRING_DATASOURCE_USERNAME: cloudorder
+      SPRING_DATASOURCE_PASSWORD: devpassword
+
+    ports:
+      - "8082:8081"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:
