@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-service-config
+  namespace: cloud-order
+data:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/productdb
+  SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+  SERVER_PORT: "8081"

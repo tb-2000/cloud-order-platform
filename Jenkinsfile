@@ -20,6 +20,19 @@ pipeline {
                 bat 'docker info'
             }
         }
+        stage('Verify Kubernetes') {
+            steps {
+                echo 'Checking Kubernetes access...'
+
+                bat '''
+                    where kubectl
+                    kubectl version --client
+                    kubectl config current-context
+                    kubectl get nodes
+                    kubectl get deployments -n cloud-order
+                '''
+            }
+        }
         stage('Compile') {
             steps {
                 echo 'Compiling...'
