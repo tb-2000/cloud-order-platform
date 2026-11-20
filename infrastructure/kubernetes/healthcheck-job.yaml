@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: product-service-healthcheck
+  namespace: cloud-order
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: healthcheck
+          image: curlimages/curl:8.12.1
+          command:
+            - sh
+            - -c
+            - |
+              curl --fail --silent --show-error \
+                --retry 5 \
+                --retry-delay 2 \
+                --retry-connrefused \
+                http://product-service:8081/actuator/health

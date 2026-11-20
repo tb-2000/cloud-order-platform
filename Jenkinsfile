@@ -86,7 +86,7 @@ pipeline {
         }
         stage('Verify Kubernetes Health') {
             steps {
-                echo 'Checking Kubernetes application health...'
+                echo 'Checking Product Service health inside Kubernetes...'
 
                 bat '''
                     kubectl wait --for=condition=Ready ^
@@ -96,13 +96,23 @@ pipeline {
                 '''
 
                 bat '''
-                    kubectl get pods -n cloud-order
-                    kubectl get deployments -n cloud-order
-                '''
-                bat '''
-                    kubectl get deployment product-service ^
+                    kubectl delete job product-service-healthcheck ^
                         -n cloud-order ^
-                        -o jsonpath="{.spec.template.spec.containers[0].image}"
+                        --ignore-not-found=true ^
+                        --wait=true
+
+                    kubectl apply -f infrastructure/kubernetes/healthcheck-job.yaml
+
+                    kubectl wait ^
+                        --for=condition=Complete ^
+                        job/product-service-healthcheck ^
+                        -n cloud-order ^
+                        --timeout=120s
+                '''
+
+                bat '''
+                    kubectl logs job/product-service-healthcheck -n cloud-order
+                    kubectl get deployments -n cloud-order
                 '''
             }
         }
