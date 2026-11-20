@@ -62,6 +62,50 @@ pipeline {
                 '''
             }
         }
+        stage('Deploy Kubernetes') {
+            steps {
+                echo 'Deploying image cloudorder/product-service:${env.BUILD_NUMBER} to Kubernetes...'
+
+                bat '''
+                    kubectl set image deployment/product-service ^
+                        product-service=cloudorder/product-service:%BUILD_NUMBER% ^
+                        -n cloud-order
+                '''
+            }
+        }
+        stage('Verify Kubernetes Rollout') {
+            steps {
+                echo 'Waiting for Kubernetes rollout...'
+
+                bat '''
+                    kubectl rollout status deployment/product-service ^
+                        -n cloud-order ^
+                        --timeout=180s
+                '''
+            }
+        }
+        stage('Verify Kubernetes Health') {
+            steps {
+                echo 'Checking Kubernetes application health...'
+
+                bat '''
+                    kubectl wait --for=condition=Ready ^
+                        pod -l app=product-service ^
+                        -n cloud-order ^
+                        --timeout=120s
+                '''
+
+                bat '''
+                    kubectl get pods -n cloud-order
+                    kubectl get deployments -n cloud-order
+                '''
+                bat '''
+                    kubectl get deployment product-service ^
+                        -n cloud-order ^
+                        -o jsonpath="{.spec.template.spec.containers[0].image}"
+                '''
+            }
+        }
         stage('Deploy') {
             steps {
                 echo 'Deploying Product Service with Docker Compose...'
