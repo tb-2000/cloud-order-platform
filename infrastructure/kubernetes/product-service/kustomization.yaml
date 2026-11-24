@@ -5,6 +5,6 @@ resources:
   - deployment.yaml
 images:
   - name: cloudorder/product-service
-    newName: cloudorder/product-service
+    newName: ghcr.io/tb-2000/product-service
     newTag: "dev"
 

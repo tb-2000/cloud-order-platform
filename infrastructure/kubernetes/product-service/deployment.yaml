@@ -13,10 +13,14 @@ spec:
       labels:
         app: product-service
     spec:
+      template:
+        spec:
+          imagePullSecrets:
+            - name: ghcr-secret
       containers:
         - name: product-service
           image: cloudorder/product-service:dev
-          imagePullPolicy: Never
+          imagePullPolicy: Always
 
           ports:
             - containerPort: 8081

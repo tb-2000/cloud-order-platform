@@ -53,18 +53,57 @@ pipeline {
         }
         stage('Build Docker') {
             steps {
-                echo 'Building Docker image...'
+                echo "Pushing image to GitHub Container Registry..."
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'ghcr-credentials', 
+                        usernameVariable: 'GHCR_USERNAME', 
+                        passwordVariable: 'GHCR_TOKEN'
+                        )
+                ]) {
+                    powershell '''
+                        $image = "ghcr.io/tb-2000/product-service:$env:BUILD_NUMBER"
+
+                        $env:GHCR_TOKEN | docker login ghcr.io `
+                            --username $env:GHCR_USERNAME `
+                            --password-stdin
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "GHCR login failed"
+                        }
+
+                        try {
+                            docker tag "cloudorder/product-service:$env:BUILD_NUMBER" $image
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Docker tagging failed"
+                            }
+
+                            docker push $image
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Docker push failed"
+                            }
+                        }
+                        finally {
+                            docker logout ghcr.io
+                        }
+                    '''
+                }
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
+                echo 'Pushing Docker image...'
                 bat '''
-                    docker build ^
-                    -t cloudorder/product-service:%BUILD_NUMBER% ^
-                    -t cloudorder/product-service:latest ^
-                    ./services/product-service
+                    docker push cloudorder/product-service:%BUILD_NUMBER%
+                    docker push cloudorder/product-service:latest
                 '''
             }
         }
         stage('Deploy Kubernetes') {
             steps {
-                echo "Deploying image cloudorder/product-service:${env.BUILD_NUMBER} using Kustomize..."
+                echo "Deploying ghcr.io/tb-2000/product-service:${env.BUILD_NUMBER} using Kustomize..."
 
                 powershell '''
                     $path = "infrastructure/kubernetes/product-service/kustomization.yaml"
