@@ -53,6 +53,17 @@ pipeline {
         }
         stage('Build Docker') {
             steps {
+                echo 'Building Docker image...'
+                bat '''
+                    docker build ^
+                        -t cloudorder/product-service:%BUILD_NUMBER% ^
+                        -t cloudorder/product-service:latest ^
+                        ./services/product-service
+                '''
+            }
+        }
+        stage('Push Docker Image') {
+            steps {
                 echo "Pushing image to GitHub Container Registry..."
                 withCredentials([
                     usernamePassword(
@@ -90,15 +101,6 @@ pipeline {
                         }
                     '''
                 }
-            }
-        }
-        stage('Push Docker Image') {
-            steps {
-                echo 'Pushing Docker image...'
-                bat '''
-                    docker push cloudorder/product-service:%BUILD_NUMBER%
-                    docker push cloudorder/product-service:latest
-                '''
             }
         }
         stage('Deploy Kubernetes') {
