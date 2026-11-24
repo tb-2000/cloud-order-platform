@@ -75,6 +75,14 @@ pipeline {
                     powershell '''
                         $image = "ghcr.io/tb-2000/product-service:$env:BUILD_NUMBER"
 
+                        Write-Host "GHCR Username: $env:GHCR_USERNAME"
+
+                        Write-Host "Token exists: $(-not [string]::IsNullOrWhiteSpace($env:GHCR_TOKEN))"
+
+                        Write-Host "Token length: $($env:GHCR_TOKEN.Length)"
+
+                        Write-Host "Is classic PAT: $($env:GHCR_TOKEN.StartsWith('ghp_'))"
+
                         $env:GHCR_TOKEN | docker login ghcr.io `
                             --username $env:GHCR_USERNAME `
                             --password-stdin
