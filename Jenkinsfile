@@ -64,34 +64,53 @@ pipeline {
         }
         stage('Push Docker Image') {
             steps {
-                echo "Pushing image to GitHub Container Registry..."
+                echo 'Pushing image to GitHub Container Registry...'
+
                 withCredentials([
                     usernamePassword(
-                        credentialsId: 'ghcr-credentials', 
-                        usernameVariable: 'GHCR_USERNAME', 
+                        credentialsId: 'ghcr-credentials',
+                        usernameVariable: 'GHCR_USERNAME',
                         passwordVariable: 'GHCR_TOKEN'
-                        )
+                    )
                 ]) {
                     powershell '''
+                        $ErrorActionPreference = "Stop"
+
                         $image = "ghcr.io/tb-2000/product-service:$env:BUILD_NUMBER"
 
-                        Write-Host "GHCR Username: $env:GHCR_USERNAME"
+                        $configDir = Join-Path ([System.IO.Path]::GetTempPath()) `
+                            ("jenkins-docker-" + [guid]::NewGuid())
 
-                        Write-Host "Token exists: $(-not [string]::IsNullOrWhiteSpace($env:GHCR_TOKEN))"
-
-                        Write-Host "Token length: $($env:GHCR_TOKEN.Length)"
-
-                        Write-Host "Is classic PAT: $($env:GHCR_TOKEN.StartsWith('ghp_'))"
-
-                        $env:GHCR_TOKEN | docker login ghcr.io `
-                            --username $env:GHCR_USERNAME `
-                            --password-stdin
-
-                        if ($LASTEXITCODE -ne 0) {
-                            throw "GHCR login failed"
-                        }
+                        New-Item -ItemType Directory `
+                            -Path $configDir -Force | Out-Null
 
                         try {
+                            $credentials = "$($env:GHCR_USERNAME):$($env:GHCR_TOKEN)"
+
+                            $encoded = [Convert]::ToBase64String(
+                                [Text.Encoding]::UTF8.GetBytes($credentials)
+                            )
+
+                            $config = @{
+                                auths = @{
+                                    "ghcr.io" = @{
+                                        auth = $encoded
+                                    }
+                                }
+                            }
+
+                            $config | ConvertTo-Json -Depth 5 |
+                                Set-Content `
+                                    -Path (Join-Path $configDir "config.json") `
+                                    -Encoding ASCII
+
+                            $env:DOCKER_CONFIG = $configDir
+
+                            Remove-Item Env:DOCKER_CONTEXT `
+                                -ErrorAction SilentlyContinue
+
+                            $env:DOCKER_HOST = "npipe:////./pipe/dockerDesktopLinuxEngine"
+
                             docker tag "cloudorder/product-service:$env:BUILD_NUMBER" $image
 
                             if ($LASTEXITCODE -ne 0) {
@@ -103,9 +122,11 @@ pipeline {
                             if ($LASTEXITCODE -ne 0) {
                                 throw "Docker push failed"
                             }
+
+                            Write-Host "Docker image successfully pushed"
                         }
                         finally {
-                            docker logout ghcr.io
+                            Remove-Item -Path $configDir -Recurse -Force
                         }
                     '''
                 }
