@@ -3,20 +3,23 @@ kind: Deployment
 metadata:
   name: product-service
   namespace: cloud-order
+
 spec:
   replicas: 1
+
   selector:
     matchLabels:
       app: product-service
+
   template:
     metadata:
       labels:
         app: product-service
+
     spec:
-      template:
-        spec:
-          imagePullSecrets:
-            - name: ghcr-secret
+      imagePullSecrets:
+        - name: ghcr-secret
+
       containers:
         - name: product-service
           image: cloudorder/product-service:dev
@@ -24,10 +27,6 @@ spec:
 
           ports:
             - containerPort: 8081
-
-          envFrom:
-            - configMapRef:
-                name: product-service-config
 
           env:
             - name: SPRING_DATASOURCE_USERNAME
@@ -41,6 +40,10 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: POSTGRES_PASSWORD
+
+          envFrom:
+            - configMapRef:
+                name: product-service-config
 
           readinessProbe:
             httpGet:
@@ -58,8 +61,8 @@ spec:
 
           resources:
             requests:
-              memory: "256Mi"
-              cpu: "100m"
+              cpu: 100m
+              memory: 256Mi
             limits:
-              memory: "1Gi"
-              cpu: "1000m"
+              cpu: 1000m
+              memory: 1Gi
