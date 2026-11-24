@@ -64,12 +64,32 @@ pipeline {
         }
         stage('Deploy Kubernetes') {
             steps {
-                echo 'Deploying image cloudorder/product-service:${env.BUILD_NUMBER} to Kubernetes...'
+                echo "Deploying image cloudorder/product-service:${env.BUILD_NUMBER} using Kustomize..."
 
-                bat '''
-                    kubectl set image deployment/product-service ^
-                        product-service=cloudorder/product-service:%BUILD_NUMBER% ^
-                        -n cloud-order
+                powershell '''
+                    $path = "infrastructure/kubernetes/product-service/kustomization.yaml"
+
+                    $content = Get-Content $path -Raw
+                    $updated = $content.Replace(
+                        'newTag: "dev"',
+                        'newTag: "' + $env:BUILD_NUMBER + '"'
+                    )
+
+                    if ($updated -eq $content) {
+                        throw "Image tag placeholder not found in kustomization.yaml"
+                    }
+
+                    Set-Content -Path $path -Value $updated -Encoding utf8
+
+                    kubectl kustomize infrastructure/kubernetes/product-service
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Kustomize rendering failed"
+                    }
+
+                    kubectl apply -k infrastructure/kubernetes/product-service
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "Kubernetes deployment failed"
+                    }
                 '''
             }
         }

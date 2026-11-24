@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: product-service
-          image: cloudorder/product-service:latest
+          image: cloudorder/product-service:dev
           imagePullPolicy: Never
 
           ports:
