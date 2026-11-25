@@ -3,6 +3,10 @@ pipeline {
 
     options {
         timestamps()
+        disableConcurrentBuilds()
+    }
+    parameters {
+        booleanParam(name: 'SIMULATE_K8S_FAILURE', defaultValue: false, description: 'Simulate Kubernetes deployment failure')
     }
 
     stages {
@@ -132,78 +136,231 @@ pipeline {
                 }
             }
         }
-        stage('Deploy Kubernetes') {
+        stage('Capture Deployment Revision') {
             steps {
-                echo "Deploying ghcr.io/tb-2000/product-service:${env.BUILD_NUMBER} using Kustomize..."
+                script {
+                    echo 'Capturing current Kubernetes deployment...'
 
-                powershell '''
-                    $path = "infrastructure/kubernetes/product-service/kustomization.yaml"
+                    env.PREVIOUS_REVISION = powershell(
+                        returnStdout: true,
+                        script: '''
+                            kubectl rollout status deployment/product-service `
+                                -n cloud-order --timeout=180s | Out-Host
 
-                    $content = Get-Content $path -Raw
-                    $updated = $content.Replace(
-                        'newTag: "dev"',
-                        'newTag: "' + $env:BUILD_NUMBER + '"'
-                    )
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Current deployment is not healthy"
+                            }
 
-                    if ($updated -eq $content) {
-                        throw "Image tag placeholder not found in kustomization.yaml"
-                    }
+                            $deployment = kubectl get deployment product-service `
+                                -n cloud-order -o json | ConvertFrom-Json
 
-                    Set-Content -Path $path -Value $updated -Encoding utf8
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Could not read deployment"
+                            }
 
-                    kubectl kustomize infrastructure/kubernetes/product-service
-                    if ($LASTEXITCODE -ne 0) {
-                        throw "Kustomize rendering failed"
-                    }
+                            $revision = $deployment.metadata.annotations.'deployment.kubernetes.io/revision'
 
-                    kubectl apply -k infrastructure/kubernetes/product-service
-                    if ($LASTEXITCODE -ne 0) {
-                        throw "Kubernetes deployment failed"
-                    }
-                '''
+                            if (-not $revision) {
+                                throw "No deployment revision found"
+                            }
+
+                            Write-Output $revision
+                        '''
+                    ).trim()
+
+                    env.PREVIOUS_IMAGE = powershell(
+                        returnStdout: true,
+                        script: '''
+                            $deployment = kubectl get deployment product-service `
+                                -n cloud-order -o json | ConvertFrom-Json
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Could not read deployment"
+                            }
+
+                            Write-Output $deployment.spec.template.spec.containers[0].image
+                        '''
+                    ).trim()
+
+                    echo "Previous revision: ${env.PREVIOUS_REVISION}"
+                    echo "Previous image: ${env.PREVIOUS_IMAGE}"
+                }
             }
         }
-        stage('Verify Kubernetes Rollout') {
-            steps {
-                echo 'Waiting for Kubernetes rollout...'
+        stage('Kubernetes Deployment') {
+            stages {
+                stage('Deploy Kubernetes') {
+                    steps {
+                        script {
+                            env.DEPLOY_TAG = params.SIMULATE_K8S_FAILURE
+                                ? "rollback-test-missing-${env.BUILD_NUMBER}"
+                                : env.BUILD_NUMBER
 
-                bat '''
-                    kubectl rollout status deployment/product-service ^
-                        -n cloud-order ^
-                        --timeout=180s
-                '''
+                            echo "Deploying image tag: ${env.DEPLOY_TAG}"
+                        }
+
+                        powershell '''
+                            $path = "infrastructure/kubernetes/product-service/kustomization.yaml"
+
+                            $content = Get-Content $path -Raw
+
+                            $updated = $content.Replace(
+                                'newTag: "dev"',
+                                'newTag: "' + $env:DEPLOY_TAG + '"'
+                            )
+
+                            if ($updated -eq $content) {
+                                throw "Image tag placeholder not found"
+                            }
+
+                            try {
+                                Set-Content -Path $path -Value $updated -Encoding utf8
+
+                                kubectl kustomize infrastructure/kubernetes/product-service
+
+                                if ($LASTEXITCODE -ne 0) {
+                                    throw "Kustomize rendering failed"
+                                }
+
+                                kubectl apply -k infrastructure/kubernetes/product-service
+
+                                if ($LASTEXITCODE -ne 0) {
+                                    throw "Kubernetes deployment failed"
+                                }
+                            }
+                            finally {
+                                Set-Content -Path $path -Value $content -Encoding utf8
+                            }
+                        '''
+                    }
+                }
+
+                stage('Verify Kubernetes Rollout') {
+                    steps {
+                        echo 'Waiting for Kubernetes rollout...'
+
+                        powershell '''
+                            kubectl rollout status deployment/product-service `
+                                -n cloud-order `
+                                --timeout=180s
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Kubernetes rollout failed"
+                            }
+                        '''
+                    }
+                }
+
+                stage('Verify Kubernetes Health') {
+                    steps {
+                        echo 'Checking Product Service health...'
+
+                        powershell '''
+                            kubectl wait --for=condition=Ready `
+                                pod -l app=product-service `
+                                -n cloud-order `
+                                --timeout=120s
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Product Service pods are not ready"
+                            }
+
+                            kubectl delete job product-service-healthcheck `
+                                -n cloud-order `
+                                --ignore-not-found=true `
+                                --wait=true
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Could not delete previous healthcheck job"
+                            }
+
+                            kubectl apply -f infrastructure/kubernetes/healthcheck-job.yaml
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Could not create healthcheck job"
+                            }
+
+                            kubectl wait --for=condition=Complete `
+                                job/product-service-healthcheck `
+                                -n cloud-order `
+                                --timeout=120s
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Kubernetes healthcheck failed"
+                            }
+
+                            kubectl logs job/product-service-healthcheck -n cloud-order
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Could not retrieve healthcheck logs"
+                            }
+                        '''
+                    }
+                }
             }
-        }
-        stage('Verify Kubernetes Health') {
-            steps {
-                echo 'Checking Product Service health inside Kubernetes...'
 
-                bat '''
-                    kubectl wait --for=condition=Ready ^
-                        pod -l app=product-service ^
-                        -n cloud-order ^
-                        --timeout=120s
-                '''
+            post {
+                failure {
+                    echo 'Kubernetes deployment failed. Initiating rollback...'
 
-                bat '''
-                    kubectl delete job product-service-healthcheck ^
-                        -n cloud-order ^
-                        --ignore-not-found=true ^
-                        --wait=true
+                    powershell '''
+                        if (-not $env:PREVIOUS_REVISION -or -not $env:PREVIOUS_IMAGE) {
+                            throw "No previous deployment information available"
+                        }
 
-                    kubectl apply -f infrastructure/kubernetes/healthcheck-job.yaml
+                        $deployment = kubectl get deployment product-service `
+                            -n cloud-order -o json | ConvertFrom-Json
 
-                    kubectl wait ^
-                        --for=condition=Complete ^
-                        job/product-service-healthcheck ^
-                        -n cloud-order ^
-                        --timeout=120s
-                '''
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not inspect current deployment"
+                        }
 
-                bat '''
-                    kubectl logs job/product-service-healthcheck -n cloud-order
-                    kubectl get deployments -n cloud-order
-                '''
+                        $currentRevision = $deployment.metadata.annotations.'deployment.kubernetes.io/revision'
+                        $currentImage = $deployment.spec.template.spec.containers[0].image
+
+                        if ($currentRevision -eq $env:PREVIOUS_REVISION -and
+                            $currentImage -eq $env:PREVIOUS_IMAGE) {
+
+                            Write-Host "Deployment has not changed. Rollback not required."
+                        }
+                        else {
+                            Write-Host "Rolling back to revision $env:PREVIOUS_REVISION"
+                            Write-Host "Restoring image $env:PREVIOUS_IMAGE"
+
+                            kubectl rollout undo deployment/product-service `
+                                -n cloud-order `
+                                --to-revision=$env:PREVIOUS_REVISION
+
+                            if ($LASTEXITCODE -ne 0) {
+                                throw "Rollback command failed"
+                            }
+                        }
+
+                        kubectl rollout status deployment/product-service `
+                            -n cloud-order `
+                            --timeout=180s
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Rollback rollout failed"
+                        }
+
+                        $restored = kubectl get deployment product-service `
+                            -n cloud-order -o json | ConvertFrom-Json
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Could not verify restored deployment"
+                        }
+
+                        $restoredImage = $restored.spec.template.spec.containers[0].image
+
+                        if ($restoredImage -ne $env:PREVIOUS_IMAGE) {
+                            throw "Rollback restored an unexpected image"
+                        }
+
+                        Write-Host "Rollback rollout successfully verified"
+                        Write-Host "Restored image: $restoredImage"
+                    '''
+                }
             }
         }
         stage('Deploy') {
